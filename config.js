@@ -1,0 +1,1 @@
+globalThis.DJALKA_CONFIG = {"url": "https://wnecczvdvybdkwikjpvg.supabase.co", "key": "sb_publishable_yWqBx0w8TfnL-WT4NL93tA_KgKlPMq6"};
