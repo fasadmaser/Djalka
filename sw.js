@@ -1,4 +1,4 @@
-const CACHE='djalka-v4-0';
+const CACHE='djalka-v4-1';
 const FILES=['./admin.webmanifest','./config.js','./app.js','./icon.svg','./index.webmanifest','./admin-512.png','./business-192.png','./map-data.js','./index-192.png','./business-512.png','./index.html','./admin.html','./business.html','./index-512.png','./business.webmanifest','./admin-192.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES.map(f=>new Request(f,{cache:'reload'})))).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('djalka-v')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
