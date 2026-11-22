@@ -1,0 +1,234 @@
+name: Djalka Admin APK
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/djalka-admin.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Prepare Android project
+        shell: bash
+        run: |
+          mkdir -p apk/app/src/main/java/ru/djalka/admin
+          mkdir -p apk/app/src/main/res/drawable
+          cp admin-192.png apk/app/src/main/res/drawable/icon.png
+          cd apk
+
+          cat > settings.gradle <<'GRADLE'
+          pluginManagement {
+            repositories {
+              google()
+              mavenCentral()
+              gradlePluginPortal()
+            }
+          }
+          dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+              google()
+              mavenCentral()
+            }
+          }
+          rootProject.name = 'DjalkaAdmin'
+          include ':app'
+          GRADLE
+
+          cat > app/build.gradle <<'GRADLE'
+          plugins {
+            id 'com.android.application' version '8.7.3'
+          }
+          android {
+            namespace 'ru.djalka.admin'
+            compileSdk 35
+            defaultConfig {
+              applicationId 'ru.djalka.app.admin'
+              minSdk 23
+              targetSdk 34
+              versionCode 1
+              versionName '1.0'
+            }
+          }
+          GRADLE
+
+          cat > app/src/main/AndroidManifest.xml <<'XML'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.INTERNET"/>
+            <application
+              android:label="Джалка Админ"
+              android:icon="@drawable/icon"
+              android:allowBackup="false"
+              android:usesCleartextTraffic="false"
+              android:theme="@android:style/Theme.Material.Light.NoActionBar">
+              <activity
+                android:name=".MainActivity"
+                android:exported="true"
+                android:configChanges="orientation|screenSize|keyboardHidden">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN"/>
+                  <category android:name="android.intent.category.LAUNCHER"/>
+                </intent-filter>
+              </activity>
+            </application>
+          </manifest>
+          XML
+
+          cat > app/src/main/java/ru/djalka/admin/MainActivity.java <<'JAVA'
+          package ru.djalka.admin;
+
+          import android.app.Activity;
+          import android.app.AlertDialog;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.webkit.*;
+          import android.widget.Toast;
+
+          public class MainActivity extends Activity {
+            private WebView web;
+            private ValueCallback<Uri[]> picker;
+            private static final String URL =
+              "https://fasadmaser.github.io/Djalka/admin.html";
+
+            @Override
+            public void onCreate(Bundle state) {
+              super.onCreate(state);
+              getWindow().setStatusBarColor(0xff164c39);
+              web = new WebView(this);
+              setContentView(web);
+
+              WebSettings s = web.getSettings();
+              s.setJavaScriptEnabled(true);
+              s.setDomStorageEnabled(true);
+              s.setAllowFileAccess(false);
+              s.setAllowContentAccess(true);
+              s.setMixedContentMode(
+                WebSettings.MIXED_CONTENT_NEVER_ALLOW
+              );
+              s.setSupportMultipleWindows(false);
+
+              web.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean shouldOverrideUrlLoading(
+                  WebView v, WebResourceRequest r
+                ) {
+                  Uri u = r.getUrl();
+                  if ("https".equals(u.getScheme())
+                    && "fasadmaser.github.io".equalsIgnoreCase(u.getHost())
+                    && "/Djalka/admin.html".equals(u.getPath())) {
+                    return false;
+                  }
+
+                  String scheme = u.getScheme();
+                  if ("https".equals(scheme)
+                    || "tel".equals(scheme)
+                    || "mailto".equals(scheme)
+                    || "whatsapp".equals(scheme)) {
+                    try {
+                      startActivity(new Intent(Intent.ACTION_VIEW,u));
+                    } catch(Exception e) {
+                      Toast.makeText(MainActivity.this,
+                        "Не удалось открыть ссылку",
+                        Toast.LENGTH_LONG).show();
+                    }
+                  }
+                  return true;
+                }
+
+                @Override
+                public void onReceivedError(
+                  WebView v, WebResourceRequest r,
+                  WebResourceError e
+                ) {
+                  if(r.isForMainFrame()) {
+                    new AlertDialog.Builder(MainActivity.this)
+                      .setMessage("Проверьте интернет")
+                      .setPositiveButton("Повторить",
+                        (d,w)->web.loadUrl(URL))
+                      .setNegativeButton("Закрыть",null)
+                      .show();
+                  }
+                }
+              });
+
+              web.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public boolean onShowFileChooser(
+                  WebView v, ValueCallback<Uri[]> cb,
+                  FileChooserParams params
+                ) {
+                  if(picker!=null) picker.onReceiveValue(null);
+                  picker=cb;
+                  try {
+                    startActivityForResult(params.createIntent(),42);
+                  } catch(Exception e) {
+                    picker.onReceiveValue(null);
+                    picker=null;
+                  }
+                  return true;
+                }
+              });
+
+              if(state==null || web.restoreState(state)==null) {
+                web.loadUrl(URL);
+              }
+            }
+
+            @Override
+            protected void onActivityResult(
+              int request,int result,Intent data
+            ) {
+              super.onActivityResult(request,result,data);
+              if(request==42 && picker!=null) {
+                picker.onReceiveValue(
+                  WebChromeClient.FileChooserParams.parseResult(result,data)
+                );
+                picker=null;
+              }
+            }
+
+            @Override
+            protected void onSaveInstanceState(Bundle state) {
+              super.onSaveInstanceState(state);
+              web.saveState(state);
+            }
+
+            @Override
+            public void onBackPressed() {
+              if(web.canGoBack()) web.goBack();
+              else super.onBackPressed();
+            }
+          }
+          JAVA
+
+      - name: Build Admin APK
+        run: |
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          cd apk
+          gradle --no-daemon assembleDebug
+          mkdir -p "$GITHUB_WORKSPACE/output"
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/output/Djalka-Admin.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Djalka-Admin-APK
+          path: output/*.apk
